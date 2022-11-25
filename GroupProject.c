@@ -8,12 +8,14 @@
 #include <time.h>
 #include <pthread.h>
 #include <string.h>
+#include <semaphore.h>
 
 int n;
 int c;
 int r;
 float** data;
-float* rowSums;
+double* rowSums;
+sem_t* rowSemaphores;
 
 void printMat() // function to print matrix assigned to each thread
 {
@@ -34,6 +36,16 @@ void printMat() // function to print matrix assigned to each thread
             printf("_______________________\n");
             ++threadNumber;
         }
+    printf("Full matrix:\n");
+    for(int i = 0;i<n;++i)
+    {
+        for(int j = 0;j<n;++j)
+        {
+            printf("%7.2f+",data[i][j]);
+        }        
+        printf("\n");
+    }
+    printf("_______________________\n");
 }
 
 //compute sum of matrix partitioned to thread
@@ -52,11 +64,14 @@ void* sum(void* p){
     for(int i = 0;i<n/r;++i)
     {
         valPointer = rowPointer;
+        sem_wait(&rowSemaphores[rowNumber]);
         for(int j = 0;j<n/c;++j)
         {
             partialArraySum += *valPointer;
+            rowSums[rowNumber] += *valPointer;
             ++valPointer;
         }
+        sem_post(&rowSemaphores[rowNumber]);
         ++rowNumber;
         rowPointer = &data[rowNumber][columnNumber];
     }
@@ -155,7 +170,13 @@ int main(int argc, char *argv[]){
         data[i] = (float*)malloc(n * sizeof(float));
     }
 
-    rowSums = (float*)malloc(n * sizeof(float));
+    rowSums = (double*)malloc(n * sizeof(double));
+
+    rowSemaphores = (sem_t*)malloc(n * sizeof(sem_t));
+
+    for(int i = 0;i<n;++i)
+        sem_init(&rowSemaphores[i],0,1); //init and lock row semaphores
+    
     float *threadTimes = (float*)malloc(n * sizeof(float));
     float totalSum = 0;
 
@@ -199,13 +220,15 @@ int main(int argc, char *argv[]){
 
     printf("\n");
 
-    //computing final sum of matrix
-    //for( int i = 0; i < n; i++)
-        //totalSum += rowSums[i];
+    for(int i = 0;i<n;++i)
+        printf("row sum for row %d : %f\n",i,rowSums[i]);
 
     //computing final time
     clock_gettime(CLOCK_REALTIME, &endTime);
     float totalTime = (endTime.tv_sec - startTime.tv_sec) + (endTime.tv_nsec - startTime.tv_nsec);
     printf("Total time: %f\n", totalTime);
+
+    for(int i = 0;i<n;++i)
+        sem_destroy(&rowSemaphores[i]);
 }
 
