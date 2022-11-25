@@ -15,6 +15,8 @@ int c;
 int r;
 float** data;
 double* rowSums;
+double* partitionSums;
+struct timespec* threadTimings;
 sem_t* rowSemaphores;
 
 void printMat() // function to print matrix assigned to each thread
@@ -60,14 +62,13 @@ void* sum(void* p){
     float* rowPointer = &data[rowNumber][columnNumber];
     float* valPointer;
 
-    double partialArraySum = 0;
     for(int i = 0;i<n/r;++i)
     {
         valPointer = rowPointer;
         sem_wait(&rowSemaphores[rowNumber]);
         for(int j = 0;j<n/c;++j)
         {
-            partialArraySum += *valPointer;
+            partitionSums[threadNumber] += *valPointer;
             rowSums[rowNumber] += *valPointer;
             ++valPointer;
         }
@@ -76,7 +77,10 @@ void* sum(void* p){
         rowPointer = &data[rowNumber][columnNumber];
     }
 
-    printf("partialArraySum for thread %d: %f\n",threadNumber,partialArraySum);
+    printf("partitionSum for thread %d: %f\n",threadNumber,partitionSums[threadNumber]);
+
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID,&threadTimings[threadNumber]);
+    printf("timing for thread %d in milliseconds: %f\n",threadNumber,((threadTimings[threadNumber].tv_nsec) / 1000000.0));
 
     pthread_exit(NULL);
 }
@@ -171,14 +175,14 @@ int main(int argc, char *argv[]){
     }
 
     rowSums = (double*)malloc(n * sizeof(double));
+    partitionSums = (double*)malloc(t * sizeof(double));
 
     rowSemaphores = (sem_t*)malloc(n * sizeof(sem_t));
 
+    threadTimings = (struct timespec*)malloc(t * sizeof(struct timespec));
+
     for(int i = 0;i<n;++i)
         sem_init(&rowSemaphores[i],0,1); //init and lock row semaphores
-    
-    float *threadTimes = (float*)malloc(n * sizeof(float));
-    float totalSum = 0;
 
     //initializing values to array
     if(v_arg_provided)
@@ -201,11 +205,7 @@ int main(int argc, char *argv[]){
             }
     }
 
-    printMat();
-
-    //start real time
-    struct timespec startTime, endTime, delta;
-    clock_gettime(CLOCK_REALTIME, &startTime);
+    //printMat();
 
     //creates t threads
     for( int i = 0; i < t; i++){
@@ -223,10 +223,12 @@ int main(int argc, char *argv[]){
     for(int i = 0;i<n;++i)
         printf("row sum for row %d : %f\n",i,rowSums[i]);
 
-    //computing final time
-    clock_gettime(CLOCK_REALTIME, &endTime);
-    float totalTime = (endTime.tv_sec - startTime.tv_sec) + (endTime.tv_nsec - startTime.tv_nsec);
-    printf("Total time: %f\n", totalTime);
+    double totalsum = 0;
+
+    for(int i = 0;i<n;++i)
+        totalsum += rowSums[i];
+    
+    printf("total sum: %f\n",totalsum);
 
     for(int i = 0;i<n;++i)
         sem_destroy(&rowSemaphores[i]);
