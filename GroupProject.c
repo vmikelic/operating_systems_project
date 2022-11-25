@@ -1,5 +1,6 @@
 //referenced:
 //  https://stackoverflow.com/questions/30141229/sum-of-elements-in-a-matrix-using-threads-in-c
+//  https://people.cs.rutgers.edu/~pxk/416/notes/c-tutorials/gettime.html
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,6 +10,8 @@
 #include <pthread.h>
 #include <string.h>
 #include <semaphore.h>
+
+#define BILLION 1000000000L
 
 int n;
 int c;
@@ -177,6 +180,7 @@ int main(int argc, char *argv[]){
     rowSemaphores = (sem_t*)malloc(n * sizeof(sem_t));
 
     threadTimings = (struct timespec*)malloc(t * sizeof(struct timespec));
+    struct timespec* mainTimings = (struct timespec*)malloc(2 * sizeof(struct timespec));
 
     for(int i = 0;i<n;++i)
         sem_init(&rowSemaphores[i],0,1); //init and lock row semaphores
@@ -204,13 +208,7 @@ int main(int argc, char *argv[]){
 
     //printMat();
 
-    struct timespec startTime_new;
-    struct timespec endTime_new;
-    clock_gettime(CLOCK_REALTIME,&startTime_new);
-
-    //start real time
-    struct timespec startTime, endTime, delta;
-    clock_gettime(CLOCK_REALTIME, &startTime);
+    clock_gettime(CLOCK_REALTIME, &mainTimings[0]);	/* mark start time */
 
     //creates t threads
     for( int i = 0; i < t; i++){
@@ -242,19 +240,19 @@ int main(int argc, char *argv[]){
         exit(EXIT_FAILURE);
     }
 
+    unsigned long timing;
     for(int i = 0;i<t;++i)
-        printf("Time spent for thread %d in milliseconds: %f\n",i,((threadTimings[i].tv_nsec) / 1000000.0));
+    {
+        timing = BILLION * (threadTimings[i].tv_sec) + threadTimings[i].tv_nsec;
+        printf("CPU time spent in thread %d: %f milliseconds\n",i,((long long unsigned int) timing / 1000000.0));
+    }
 
     for(int i = 0;i<n;++i)
         sem_destroy(&rowSemaphores[i]);
-    
-    sleep(3);
 
-    clock_gettime(CLOCK_REALTIME,&endTime_new);
-    printf("Program exiting. Time spent after array initialization: %ld\n",((endTime_new.tv_nsec-startTime_new.tv_nsec)));
-    //computing final time
-    clock_gettime(CLOCK_REALTIME, &endTime);
-    float totalTime = (endTime.tv_sec - startTime.tv_sec) + (endTime.tv_nsec - startTime.tv_nsec);
-    printf("Total time: %f\n", totalTime);
+	clock_gettime(CLOCK_REALTIME, &mainTimings[1]);	/* mark the end time */
+
+	timing = BILLION * (mainTimings[1].tv_sec - mainTimings[0].tv_sec) + mainTimings[1].tv_nsec - mainTimings[0].tv_nsec;
+	printf("Program exiting. Wall clock time spent after array initialization: %f milliseconds\n", ((long long unsigned int) timing / 1000000.0));
 }
 
