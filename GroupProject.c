@@ -77,10 +77,7 @@ void* sum(void* p){
         rowPointer = &data[rowNumber][columnNumber];
     }
 
-    printf("partitionSum for thread %d: %f\n",threadNumber,partitionSums[threadNumber]);
-
     clock_gettime(CLOCK_THREAD_CPUTIME_ID,&threadTimings[threadNumber]);
-    printf("timing for thread %d in milliseconds: %f\n",threadNumber,((threadTimings[threadNumber].tv_nsec) / 1000000.0));
 
     pthread_exit(NULL);
 }
@@ -207,6 +204,14 @@ int main(int argc, char *argv[]){
 
     //printMat();
 
+    struct timespec startTime_new;
+    struct timespec endTime_new;
+    clock_gettime(CLOCK_REALTIME,&startTime_new);
+
+    //start real time
+    struct timespec startTime, endTime, delta;
+    clock_gettime(CLOCK_REALTIME, &startTime);
+
     //creates t threads
     for( int i = 0; i < t; i++){
         p = malloc(sizeof(int));
@@ -220,17 +225,36 @@ int main(int argc, char *argv[]){
 
     printf("\n");
 
+    double totalRowSum = 0;
     for(int i = 0;i<n;++i)
-        printf("row sum for row %d : %f\n",i,rowSums[i]);
+        totalRowSum += rowSums[i];
 
-    double totalsum = 0;
-
-    for(int i = 0;i<n;++i)
-        totalsum += rowSums[i];
+    double slowSum = 0;
+    for( int i = 0; i < n; i++)
+            for( int j = 0; j < n; j++)
+                slowSum += data[i][j];
     
-    printf("total sum: %f\n",totalsum);
+    if(totalRowSum == slowSum)
+        printf("Sum of rows match the overall array sum, sum is: %f\n",slowSum);
+    else
+    {
+        printf("Sum of rows does not match the overall array sum. An error occured.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    for(int i = 0;i<t;++i)
+        printf("Time spent for thread %d in milliseconds: %f\n",i,((threadTimings[i].tv_nsec) / 1000000.0));
 
     for(int i = 0;i<n;++i)
         sem_destroy(&rowSemaphores[i]);
+    
+    sleep(3);
+
+    clock_gettime(CLOCK_REALTIME,&endTime_new);
+    printf("Program exiting. Time spent after array initialization: %ld\n",((endTime_new.tv_nsec-startTime_new.tv_nsec)));
+    //computing final time
+    clock_gettime(CLOCK_REALTIME, &endTime);
+    float totalTime = (endTime.tv_sec - startTime.tv_sec) + (endTime.tv_nsec - startTime.tv_nsec);
+    printf("Total time: %f\n", totalTime);
 }
 
