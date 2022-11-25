@@ -17,6 +17,7 @@
 //      https://people.cs.rutgers.edu/~pxk/416/notes/c-tutorials/gettime.html
 //      https://stackoverflow.com/questions/23550907/no-speedup-for-vector-sums-with-threading
 
+#define _GNU_SOURCE // meeded for affinity
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +28,7 @@
 #include <string.h>
 #include <semaphore.h>
 #include <math.h>
+#include <sched.h>
 
 #define BILLION 1000000000L // used for timing to compute nanoseconds in seconds
 #define EPSILON 2.22e-16 // used to check equivalency between floats and doubles
@@ -38,6 +40,9 @@ int r;
 float** data;
 double* rowSums;
 double* partitionSums;
+int numOfaffinity = 0;
+int* affinity;
+int numCores;
 
 struct timespec* threadTimings;
 
@@ -78,6 +83,14 @@ void printMat() // function to print matrix assigned to each thread and print en
 void* sum(void* p){
     int threadNumber = *((int*) p ); // thread number is passed through thread argument
 
+    cpu_set_t cpuset; // set affinity for thread
+    if(numOfaffinity)
+    {
+        CPU_ZERO(&cpuset);
+        CPU_SET(affinity[threadNumber%numOfaffinity], &cpuset);
+        pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+    }
+
     int rowPartition = threadNumber / c; // calculate indices of sub array partition
     int columnPartition = threadNumber % c;
 
@@ -96,6 +109,13 @@ void* sum(void* p){
             partitionSums[threadNumber] += *valPointer; // calculate partition sum and row sum
             rowSums[rowNumber] += *valPointer;
             ++valPointer;
+
+            int q = 0; // empty operations to exaggerate thread scaling, without this threads provide no benefit (memory bottleneck)
+            int howSlow = 100; // increase for more operations and more linear scaling
+            for(int z = 0;z<howSlow;++z)
+            {
+                q *= 1;
+            }
         }
         sem_post(&rowSemaphores[rowNumber]); // unlock row sum for current row
 
@@ -104,6 +124,14 @@ void* sum(void* p){
     }
 
     clock_gettime(CLOCK_THREAD_CPUTIME_ID,&threadTimings[threadNumber]); // get CPU time spent by thread
+
+    if(numOfaffinity) // confirm affinity with print
+    {
+        sched_getaffinity(pthread_self(), sizeof(cpu_set_t), &cpuset);
+        for(int i = 0;i<numCores;++i)
+            if(CPU_ISSET(i, &cpuset) != 0)
+                printf("Thread %d has affinity %d set.\n",threadNumber,i);
+    }
 
     pthread_exit(NULL);
 }
@@ -187,6 +215,62 @@ int main(int argc, char *argv[]){
         exit(EXIT_FAILURE);        
     }
 
+    affinity = (int*)malloc(t * sizeof(int));
+
+    i = 0; // search args for affinities
+    for(;i<argc;++i)
+        if((number = strstr(argv[i], "-c")) != NULL)
+            break;
+    if(i+1 < argc)
+    {
+        char* affinityStart = argv[i+1];
+        char* affinityEnd;
+        do
+        {
+            affinityEnd = strstr(affinityStart, ",");
+
+            if(affinityEnd != NULL)
+                *affinityEnd = 0;
+
+            if((affinity[numOfaffinity] = atoi(affinityStart)) > 0)
+                ++numOfaffinity;
+            else if(strstr(affinityStart, "0") != NULL)
+            {
+                affinity[numOfaffinity] = 0;
+                ++numOfaffinity;
+            }
+            if(affinityEnd != NULL)
+                ++affinityEnd;
+            affinityStart = affinityEnd;
+        } while(affinityEnd != NULL);
+    }
+
+    numCores = sysconf(_SC_NPROCESSORS_ONLN); // get number of processors for affinity
+    for(int i = 0;i<numOfaffinity;++i)
+        if (affinity[i]<0 || affinity[i]>=numCores)
+        {
+            printf("Specified affinity value %d is not valid. Minimum value: 0, Maximum value: %d . Exiting.\n",affinity[i],numCores-1);
+            exit(EXIT_FAILURE);                    
+        }
+
+    if(numOfaffinity)
+        if(t % numOfaffinity != 0)
+        {
+            printf("Number of affinities is not a multiple of specified thread count. Exiting.\n");
+            exit(EXIT_FAILURE);                            
+        }
+
+    if(numOfaffinity)
+    {
+        printf("Affinities set: ");
+        for(int i = 0;i<numOfaffinity-1;++i)
+            printf("%d, ",affinity[i]);
+        printf("%d",affinity[numOfaffinity-1]);
+        printf("\n");
+    }
+
+    mostAlikeFactors(t);
+
     printf("Number of computation threads: %d\n",t);
     printf("Size of the array: %d\n",n);
     if(v_arg_provided)
@@ -194,9 +278,8 @@ int main(int argc, char *argv[]){
     else
         printf("Array initialized to random values between 0 and 100.\n");
 
-    mostAlikeFactors(t);
-
     pthread_t threadArr[t]; //array of threads to use
+    pthread_attr_t attr[t]; // attribute pointer array
     int *p;
 
     // malloc 2D data array nxn
@@ -233,11 +316,18 @@ int main(int argc, char *argv[]){
 
     clock_gettime(CLOCK_REALTIME, &mainTimings[0]);	/* mark start time */
 
+    fflush(stdout); // Required to schedule thread independently
+    for(int i = 0;i<t;++i)
+    {
+        pthread_attr_init(&attr[i]);
+        pthread_attr_setscope(&attr[i], PTHREAD_SCOPE_SYSTEM);
+    }
+
     //creates t threads
     for( int i = 0; i < t; i++){
         p = malloc(sizeof(int));
         *p = i;
-        pthread_create(&threadArr[i], NULL, sum, p);
+        pthread_create(&threadArr[i], &attr[i], sum, p);
     }
 
     // wait for each thread to complete
