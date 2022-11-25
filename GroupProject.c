@@ -7,9 +7,10 @@
 //          -t # specifies a number of computational threads E.G) "./GroupProject -t 4" runs the program with 4 threads.
 //          -s # specifies the size of the matrix E.G) "./GroupProject -s 60" creates a 60 x 60 matrix.
 //          -v # specifies an initialization value for the matrix E.G) "./GroupProject -v 1" initializes all entries in the matrix to 1
+//          -c #,#,#... specifies a list of affinities for threads E.G) "./GroupProject -t 2 -c 3,4" runs the program with two threads, thread 0 has affinity 3, thread 1 has affinity 4 
 // Output: Ouputs various program information using printf():
 //              The sum of the matrix, CPU time each thread took to compute, wall time it took for the program to execute after matrix initialization.
-//              Program attribute information (thread count, matrix size, init value).
+//              Program attribute information (thread count, matrix size, init value, affinity assignments).
 //              Value checks for matrix sum using partition sums and row sums.
 
 // Resources:
@@ -239,6 +240,11 @@ int main(int argc, char *argv[]){
                 affinity[numOfaffinity] = 0;
                 ++numOfaffinity;
             }
+            if(numOfaffinity > t)
+            {
+                printf("Number of affinities should not exceed thread count. Exiting.\n");
+                exit(EXIT_FAILURE);
+            }
             if(affinityEnd != NULL)
                 ++affinityEnd;
             affinityStart = affinityEnd;
@@ -385,5 +391,7 @@ int main(int argc, char *argv[]){
 	clock_gettime(CLOCK_REALTIME, &mainTimings[1]);	/* mark the end time */
 	timing = BILLION * (mainTimings[1].tv_sec - mainTimings[0].tv_sec) + mainTimings[1].tv_nsec - mainTimings[0].tv_nsec;
 	printf("Program exiting. Wall clock time spent after array initialization: %f milliseconds\n\n", ((long long unsigned int) timing / 1000000.0));
+
+    exit(EXIT_SUCCESS);
 }
 
