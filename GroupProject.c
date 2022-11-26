@@ -347,7 +347,7 @@ int main(int argc, char *argv[]){
         totalRowSum += rowSums[i];
 
     double threadPartitionSum = 0; // compute matrix sum using sub arrays
-    for(int i = 0;i<n;++i)
+    for(int i = 0;i<t;++i)
         threadPartitionSum += partitionSums[i];
 
     double slowSum = 0; // compute sum iterating over each element in matrix
