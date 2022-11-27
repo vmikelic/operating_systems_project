@@ -349,13 +349,8 @@ int main(int argc, char *argv[]){
     double threadPartitionSum = 0; // compute matrix sum using sub arrays
     for(int i = 0;i<t;++i)
         threadPartitionSum += partitionSums[i];
-
-    double slowSum = 0; // compute sum iterating over each element in matrix
-    for( int i = 0; i < n; i++)
-            for( int j = 0; j < n; j++)
-                slowSum += data[i][j];
     
-    if(abs(slowSum-totalRowSum) < EPSILON)
+    if(abs(threadPartitionSum-totalRowSum) < EPSILON)
         printf("Sum of rows match the overall array sum.\n");
     else
     {
@@ -363,15 +358,7 @@ int main(int argc, char *argv[]){
         exit(EXIT_FAILURE);
     }
 
-    if(abs(slowSum-threadPartitionSum) < EPSILON)
-        printf("Sum of thread partition sums match the overall array sum.\n");
-    else
-    {
-        printf("Sum of thread partition sums does not match the overall array sum. An error occured.\n");
-        exit(EXIT_FAILURE);
-    }
-
-    printf("Sum of array: %f\n",slowSum);
+    printf("Sum of array: %f\n",threadPartitionSum);
     printf("\n");
 
     // thread timing
